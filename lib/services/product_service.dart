@@ -51,6 +51,20 @@ class ProductService {
     try {
       developer.log('Adding new product');
       
+      // Validate base64 image if present
+      if (productData.containsKey('imageBase64')) {
+        final imageBase64 = productData['imageBase64'] as String?;
+        if (imageBase64 != null && imageBase64.isNotEmpty) {
+          try {
+            // Attempt to decode to validate the base64 string
+            base64Decode(imageBase64);
+          } catch (e) {
+            developer.log('Invalid base64 image data', error: e);
+            throw Exception('Failed to process image: Invalid base64 data');
+          }
+        }
+      }
+      
       // Add timestamp
       productData['createdAt'] = FieldValue.serverTimestamp();
       productData['updatedAt'] = FieldValue.serverTimestamp();
@@ -70,6 +84,20 @@ class ProductService {
   Future<void> updateProduct(String productId, Map<String, dynamic> productData) async {
     try {
       developer.log('Updating product with ID: $productId');
+      
+      // Validate base64 image if present
+      if (productData.containsKey('imageBase64')) {
+        final imageBase64 = productData['imageBase64'] as String?;
+        if (imageBase64 != null && imageBase64.isNotEmpty) {
+          try {
+            // Attempt to decode to validate the base64 string
+            base64Decode(imageBase64);
+          } catch (e) {
+            developer.log('Invalid base64 image data', error: e);
+            throw Exception('Failed to process image: Invalid base64 data');
+          }
+        }
+      }
       
       // Update timestamp
       productData['updatedAt'] = FieldValue.serverTimestamp();
@@ -119,32 +147,46 @@ class ProductService {
     }
   }
 
-  // Convert image to base64
-  String imageToBase64(Uint8List imageBytes) {
+  // Safe convert image to base64
+  String? safeImageToBase64(Uint8List? imageBytes) {
+    if (imageBytes == null) return null;
+    
     try {
-      return base64Encode(imageBytes);
+      final result = base64Encode(imageBytes);
+      // Validate the resulting base64 string
+      base64Decode(result); // This will throw if invalid
+      return result;
     } catch (e) {
       developer.log('Error converting image to base64', error: e);
-      throw Exception('Failed to convert image: $e');
+      return null;
     }
   }
 
-  // Convert base64 to image
-  Image base64ToImage(String base64String) {
+  // Safe convert base64 to image widget
+  Widget safeBase64ToImage(String? base64String, {
+    double? width, 
+    double? height, 
+    BoxFit fit = BoxFit.cover
+  }) {
+    if (base64String == null || base64String.isEmpty) {
+      return const Icon(Icons.image_not_supported, size: 50);
+    }
+    
     try {
+      final bytes = base64Decode(base64String);
       return Image.memory(
-        base64Decode(base64String),
-        fit: BoxFit.cover,
+        bytes,
+        width: width,
+        height: height,
+        fit: fit,
         errorBuilder: (context, error, stackTrace) {
-          return const Icon(Icons.error, color: Colors.red);
+          developer.log('Error rendering image', error: error);
+          return const Icon(Icons.broken_image, color: Colors.red);
         },
       );
     } catch (e) {
-      developer.log('Error converting base64 to image', error: e);
-      return const Image(
-        image: AssetImage('assets/images/placeholder.png'),
-        fit: BoxFit.cover,
-      );
+      developer.log('Error decoding base64', error: e);
+      return const Icon(Icons.error_outline, color: Colors.red);
     }
   }
 
@@ -163,11 +205,11 @@ class ProductService {
             return data;
           })
           .where((product) {
-            final name = (product['name'] as String?)?.toLowerCase() ?? '';
+            final title = (product['title'] as String?)?.toLowerCase() ?? '';
             final description = (product['description'] as String?)?.toLowerCase() ?? '';
             final category = (product['category'] as String?)?.toLowerCase() ?? '';
             
-            return name.contains(lowercaseSearchTerm) ||
+            return title.contains(lowercaseSearchTerm) ||
                 description.contains(lowercaseSearchTerm) ||
                 category.contains(lowercaseSearchTerm);
           })
@@ -177,4 +219,5 @@ class ProductService {
       throw Exception('Failed to search products: $e');
     }
   }
+} 
 } 

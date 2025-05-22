@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../constants/app_constants.dart';
 import '../../services/firebase_auth_service.dart';
+import '../../services/product_service.dart';
 import '../../widgets/admin_drawer.dart';
 import '../../widgets/stats_card.dart';
 import 'admin_users_screen.dart';
@@ -16,6 +17,7 @@ class AdminDashboard extends StatefulWidget {
 
 class _AdminDashboardState extends State<AdminDashboard> {
   final FirebaseAuthService _authService = FirebaseAuthService();
+  final ProductService _productService = ProductService();
   bool _isLoading = true;
   int _totalUsers = 0;
   int _totalProducts = 0;
@@ -36,8 +38,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
       final users = await _authService.getAllUsers();
       _totalUsers = users.length;
       
-      // Mock product count for now - this would come from the ProductService
-      _totalProducts = 12;
+      // Get actual product count from ProductService
+      final products = await _productService.getAllProducts();
+      _totalProducts = products.length;
       
       if (mounted) {
         setState(() {
