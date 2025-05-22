@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "535834969829",
+    "project_id": "arunalu-d024d",
+    "storage_bucket": "arunalu-d024d.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:535834969829:android:55d1c60eee0836ef83b60c",
+        "android_client_info": {
+          "package_name": "com.company.arunalu"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDdcUPuPRpLQRboh5-A4m-xs9DsFy6n098"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
