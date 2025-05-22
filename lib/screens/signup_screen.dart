@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../constants/app_constants.dart';
 import '../widgets/custom_button.dart';
 import '../widgets/custom_input_field.dart';
 import '../widgets/social_login_button.dart';
 import '../services/firebase_auth_service.dart';
 import 'home_screen.dart';
+import 'dart:developer' as developer;
 
 class SignupScreen extends StatefulWidget {
   const SignupScreen({Key? key}) : super(key: key);
@@ -14,15 +16,20 @@ class SignupScreen extends StatefulWidget {
 }
 
 class _SignupScreenState extends State<SignupScreen> {
+  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+  
   final TextEditingController _firstNameController = TextEditingController();
   final TextEditingController _lastNameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _confirmPasswordController = TextEditingController();
-  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+  
   final FirebaseAuthService _authService = FirebaseAuthService();
+  
   bool _isLoading = false;
   String _errorMessage = '';
+  bool _obscurePassword = true;
+  bool _obscureConfirmPassword = true;
 
   @override
   void dispose() {
@@ -34,44 +41,51 @@ class _SignupScreenState extends State<SignupScreen> {
     super.dispose();
   }
 
-  void _handleSignup() async {
-    if (_formKey.currentState!.validate()) {
+  Future<void> _handleSignup() async {
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+
+    if (_passwordController.text != _confirmPasswordController.text) {
       setState(() {
-        _isLoading = true;
-        _errorMessage = '';
+        _errorMessage = 'Passwords do not match';
       });
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _errorMessage = '';
+    });
+
+    try {
+      await _authService.createUserWithEmailAndPassword(
+        _emailController.text.trim(),
+        _passwordController.text,
+        _firstNameController.text.trim(),
+        _lastNameController.text.trim(),
+      );
       
-      try {
-        await _authService.createUserWithEmailAndPassword(
-          _emailController.text.trim(),
-          _passwordController.text,
-          _firstNameController.text.trim(),
-          _lastNameController.text.trim(),
-        );
-        
-        if (!mounted) return;
-        
-        // Show success message
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Account created successfully!'),
-            backgroundColor: Colors.green,
-          ),
+          const SnackBar(content: Text('Account created successfully')),
         );
         
-        // Navigate to home screen
-        Navigator.of(context).pushReplacementNamed('/home');
-      } catch (e) {
-        setState(() {
-          _errorMessage = e.toString();
-        });
-      } finally {
-        if (mounted) {
-          setState(() {
-            _isLoading = false;
-          });
-        }
+        // Navigate back to login screen
+        Navigator.pushReplacementNamed(context, '/login');
       }
+    } on FirebaseAuthException catch (e) {
+      setState(() {
+        _errorMessage = e.message ?? 'An error occurred during registration';
+        _isLoading = false;
+      });
+      developer.log('Firebase Auth Exception during registration', error: e);
+    } catch (e) {
+      setState(() {
+        _errorMessage = 'An unexpected error occurred';
+        _isLoading = false;
+      });
+      developer.log('Unexpected error during registration', error: e);
     }
   }
 
@@ -79,47 +93,42 @@ class _SignupScreenState extends State<SignupScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        iconTheme: const IconThemeData(color: Colors.black),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+      ),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(AppConstants.defaultPadding),
           child: Form(
             key: _formKey,
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const SizedBox(height: 20),
-                // Logo
-                Text(
-                  'AT',
-                  style: TextStyle(
-                    color: AppConstants.primaryColor,
-                    fontSize: 50,
-                    fontWeight: FontWeight.bold,
-                    fontFamily: 'Roboto',
-                  ),
-                ),
-                const SizedBox(height: 5),
-                Text(
-                  'ARUNALU TECHNICS',
-                  style: TextStyle(
-                    color: AppConstants.primaryColor,
-                    fontSize: 14,
-                    letterSpacing: 1.5,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const SizedBox(height: 30),
-                // Signup text
+                // Title
                 const Text(
-                  'Sign Up Your Account',
+                  'Create Account',
                   style: TextStyle(
-                    fontSize: 22,
+                    fontSize: 28,
                     fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Please fill the details to create your account',
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: Colors.grey[600],
                   ),
                 ),
                 const SizedBox(height: 30),
                 
-                // Error message display
+                // Error message
                 if (_errorMessage.isNotEmpty)
                   Container(
                     padding: const EdgeInsets.all(10),
@@ -141,10 +150,10 @@ class _SignupScreenState extends State<SignupScreen> {
                       ],
                     ),
                   ),
-                
-                // First Name field
+
+                // First Name
                 CustomInputField(
-                  hint: 'First name',
+                  hint: 'First Name',
                   controller: _firstNameController,
                   validator: (value) {
                     if (value == null || value.isEmpty) {
@@ -155,9 +164,10 @@ class _SignupScreenState extends State<SignupScreen> {
                   isRequired: true,
                 ),
                 const SizedBox(height: 16),
-                // Last Name field
+                
+                // Last Name
                 CustomInputField(
-                  hint: 'Last name',
+                  hint: 'Last Name',
                   controller: _lastNameController,
                   validator: (value) {
                     if (value == null || value.isEmpty) {
@@ -168,9 +178,10 @@ class _SignupScreenState extends State<SignupScreen> {
                   isRequired: true,
                 ),
                 const SizedBox(height: 16),
-                // Email field
+                
+                // Email
                 CustomInputField(
-                  hint: 'Enter email address',
+                  hint: 'Email',
                   controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
                   validator: (value) {
@@ -185,14 +196,15 @@ class _SignupScreenState extends State<SignupScreen> {
                   isRequired: true,
                 ),
                 const SizedBox(height: 16),
-                // Password field
+                
+                // Password
                 CustomInputField(
                   hint: 'Password',
                   controller: _passwordController,
-                  obscureText: true,
+                  obscureText: _obscurePassword,
                   validator: (value) {
                     if (value == null || value.isEmpty) {
-                      return 'Please enter your password';
+                      return 'Please enter a password';
                     }
                     if (value.length < 6) {
                       return 'Password must be at least 6 characters';
@@ -200,13 +212,24 @@ class _SignupScreenState extends State<SignupScreen> {
                     return null;
                   },
                   isRequired: true,
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                    ),
+                    onPressed: () {
+                      setState(() {
+                        _obscurePassword = !_obscurePassword;
+                      });
+                    },
+                  ),
                 ),
                 const SizedBox(height: 16),
-                // Confirm Password field
+                
+                // Confirm Password
                 CustomInputField(
                   hint: 'Confirm Password',
                   controller: _confirmPasswordController,
-                  obscureText: true,
+                  obscureText: _obscureConfirmPassword,
                   validator: (value) {
                     if (value == null || value.isEmpty) {
                       return 'Please confirm your password';
@@ -217,47 +240,44 @@ class _SignupScreenState extends State<SignupScreen> {
                     return null;
                   },
                   isRequired: true,
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      _obscureConfirmPassword ? Icons.visibility_off : Icons.visibility,
+                    ),
+                    onPressed: () {
+                      setState(() {
+                        _obscureConfirmPassword = !_obscureConfirmPassword;
+                      });
+                    },
+                  ),
                 ),
                 const SizedBox(height: 24),
+                
                 // Sign up button
                 CustomButton(
-                  text: 'Sign Up',
+                  text: 'Create Account',
                   isLoading: _isLoading,
                   onPressed: _handleSignup,
                 ),
-                const SizedBox(height: 20),
-                // Or sign up with
-                const Text(
-                  '-or sign in with-',
-                  style: TextStyle(
-                    color: Colors.grey,
-                    fontSize: 14,
-                  ),
-                ),
-                const SizedBox(height: 20),
-                // Social login buttons
+                const SizedBox(height: 24),
+                
+                // Already have an account
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    SocialLoginButton(
-                      type: SocialLoginType.facebook,
+                    const Text('Already have an account?'),
+                    TextButton(
                       onPressed: () {
-                        // Facebook login to be implemented later
+                        // Go back to login page
+                        Navigator.of(context).pop();
                       },
-                    ),
-                    const SizedBox(width: 20),
-                    SocialLoginButton(
-                      type: SocialLoginType.apple,
-                      onPressed: () {
-                        // Apple login to be implemented later
-                      },
-                    ),
-                    const SizedBox(width: 20),
-                    SocialLoginButton(
-                      type: SocialLoginType.google,
-                      onPressed: () {
-                        // Google login to be implemented later
-                      },
+                      child: const Text(
+                        'Sign in',
+                        style: TextStyle(
+                          color: AppConstants.primaryColor,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ),
                   ],
                 ),

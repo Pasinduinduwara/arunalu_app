@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../constants/app_constants.dart';
 import '../widgets/custom_button.dart';
 import '../widgets/custom_input_field.dart';
@@ -6,6 +7,9 @@ import '../widgets/social_login_button.dart';
 import '../services/firebase_auth_service.dart';
 import 'signup_screen.dart';
 import 'home_screen.dart';
+import 'admin/admin_dashboard.dart';
+import 'forgot_password_screen.dart';
+import 'dart:developer' as developer;
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({Key? key}) : super(key: key);
@@ -20,7 +24,16 @@ class _LoginScreenState extends State<LoginScreen> {
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   final FirebaseAuthService _authService = FirebaseAuthService();
   bool _isLoading = false;
+  bool _obscurePassword = true;
   String _errorMessage = '';
+
+  @override
+  void initState() {
+    super.initState();
+    // For testing admin access, uncomment these lines:
+    // _emailController.text = FirebaseAuthService.adminEmail;
+    // _passwordController.text = FirebaseAuthService.adminPassword;
+  }
 
   @override
   void dispose() {
@@ -29,44 +42,117 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  void _handleLogin() async {
-    if (_formKey.currentState!.validate()) {
-      setState(() {
-        _isLoading = true;
-        _errorMessage = '';
-      });
-      
+  Future<void> _handleLogin() async {
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+    
+    setState(() {
+      _isLoading = true;
+      _errorMessage = '';
+    });
+    
+    // Check if this is direct admin login with hardcoded credentials
+    if (_emailController.text.trim().toLowerCase() == FirebaseAuthService.adminEmail &&
+        _passwordController.text == FirebaseAuthService.adminPassword) {
       try {
+        developer.log('Admin login attempt with hardcoded credentials');
         final userCredential = await _authService.signInWithEmailAndPassword(
           _emailController.text.trim(),
           _passwordController.text,
         );
         
-        // Update last login time in Firestore
-        if (userCredential.user != null) {
-          await _authService.updateLastLogin(userCredential.user!.uid);
-        }
-        
-        if (!mounted) return;
-        
-        Navigator.of(context).pushReplacementNamed('/home');
-      } catch (e) {
-        setState(() {
-          _errorMessage = e.toString();
-        });
-      } finally {
         if (mounted) {
-          setState(() {
-            _isLoading = false;
-          });
+          developer.log('Admin login successful, navigating to admin dashboard');
+          // Navigate directly to admin dashboard
+          Navigator.pushReplacement(
+            context, 
+            MaterialPageRoute(builder: (context) => const AdminDashboard())
+          );
+        }
+        return;
+      } catch (e) {
+        developer.log('Error during admin login, attempting admin account creation', error: e);
+        // If admin login fails (first time), try to create the admin account
+        try {
+          await _authService.createUserWithEmailAndPassword(
+            FirebaseAuthService.adminEmail,
+            FirebaseAuthService.adminPassword,
+            'Admin',
+            'User',
+            role: 'admin',
+          );
+          
+          if (mounted) {
+            developer.log('Admin account created, now logging in');
+            await _authService.signInWithEmailAndPassword(
+              FirebaseAuthService.adminEmail,
+              FirebaseAuthService.adminPassword,
+            );
+            
+            if (mounted) {
+              developer.log('Admin login successful after account creation');
+              // Navigate to admin dashboard
+              Navigator.pushReplacement(
+                context, 
+                MaterialPageRoute(builder: (context) => const AdminDashboard())
+              );
+            }
+          }
+          return;
+        } catch (createError) {
+          developer.log('Failed to create admin account', error: createError);
+          // Continue to regular error handling
         }
       }
+    }
+    
+    // Regular login flow
+    try {
+      final userCredential = await _authService.signInWithEmailAndPassword(
+        _emailController.text.trim(),
+        _passwordController.text,
+      );
+      
+      if (mounted) {
+        // Check if user is admin based on Firestore role
+        final isAdmin = await _authService.isCurrentUserAdmin();
+        
+        if (isAdmin) {
+          developer.log('User is admin, navigating to admin dashboard');
+          // Navigate to Admin Dashboard
+          Navigator.pushReplacement(
+            context, 
+            MaterialPageRoute(builder: (context) => const AdminDashboard())
+          );
+        } else {
+          developer.log('Regular user login, navigating to home screen');
+          // Regular user - navigate to home screen
+          Navigator.pushReplacementNamed(context, '/home');
+        }
+      }
+    } on FirebaseAuthException catch (e) {
+      setState(() {
+        _errorMessage = e.message ?? 'An error occurred during login';
+        _isLoading = false;
+      });
+      developer.log('Firebase Auth Exception during login', error: e);
+    } catch (e) {
+      setState(() {
+        _errorMessage = 'An unexpected error occurred';
+        _isLoading = false;
+      });
+      developer.log('Unexpected error during login', error: e);
     }
   }
 
   void _handleForgotPassword() {    
     // Navigate to forgot password screen    
     Navigator.pushNamed(context, '/forgot_password');  
+  }
+
+  void _navigateToSignup() {
+    Navigator.pushNamed(context, '/signup');
   }
 
   @override
@@ -145,7 +231,8 @@ class _LoginScreenState extends State<LoginScreen> {
                     if (value == null || value.isEmpty) {
                       return 'Please enter your email';
                     }
-                    if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) {
+                    final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
+                    if (!emailRegex.hasMatch(value)) {
                       return 'Please enter a valid email';
                     }
                     return null;
@@ -157,7 +244,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 CustomInputField(
                   hint: 'Password',
                   controller: _passwordController,
-                  obscureText: true,
+                  obscureText: _obscurePassword,
                   validator: (value) {
                     if (value == null || value.isEmpty) {
                       return 'Please enter your password';
@@ -165,6 +252,16 @@ class _LoginScreenState extends State<LoginScreen> {
                     return null;
                   },
                   isRequired: true,
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                    ),
+                    onPressed: () {
+                      setState(() {
+                        _obscurePassword = !_obscurePassword;
+                      });
+                    },
+                  ),
                 ),
                 Align(
                   alignment: Alignment.centerRight,
@@ -229,9 +326,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   children: [
                     const Text('Dont have an account?'),
                     TextButton(
-                      onPressed: () {
-                        Navigator.of(context).pushNamed('/signup');
-                      },
+                      onPressed: _navigateToSignup,
                       child: const Text(
                         'Sign up',
                         style: TextStyle(
@@ -241,6 +336,15 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                   ],
+                ),
+                // Admin login hint
+                const SizedBox(height: 5),
+                Text(
+                  'For admin access: admin@gmail.com / 123456789',
+                  style: TextStyle(
+                    color: Colors.grey[500],
+                    fontSize: 12,
+                  ),
                 ),
               ],
             ),
