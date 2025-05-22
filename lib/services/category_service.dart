@@ -9,7 +9,7 @@ class CategoryService {
   // Get all categories
   Future<List<CategoryModel>> getAllCategories({bool activeOnly = false}) async {
     try {
-      developer.log('Fetching all categories, activeOnly: $activeOnly');
+      developer.log('CategoryService: Fetching all categories, activeOnly: $activeOnly');
       
       Query query = _firestore.collection(_collection);
       
@@ -23,12 +23,18 @@ class CategoryService {
       
       final querySnapshot = await query.get();
       
-      return querySnapshot.docs
+      final categories = querySnapshot.docs
           .map((doc) => CategoryModel.fromFirestore(doc))
           .toList();
-    } catch (e) {
-      developer.log('Error fetching categories', error: e);
-      throw Exception('Failed to fetch categories: $e');
+          
+      developer.log('CategoryService: Successfully fetched ${categories.length} categories');
+      return categories;
+    } catch (e, stackTrace) {
+      developer.log('CategoryService: Error fetching categories', error: e);
+      developer.log('CategoryService: Stack trace: $stackTrace');
+      
+      // Return empty list instead of throwing to avoid crashing the app
+      return [];
     }
   }
 

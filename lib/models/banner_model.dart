@@ -1,4 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'dart:developer' as developer;
+import 'package:flutter/foundation.dart';
 
 class BannerModel {
   final String id;
@@ -23,13 +25,49 @@ class BannerModel {
 
   factory BannerModel.fromFirestore(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
+    
+    // Debug output for banner data
+    developer.log('Banner data for ${doc.id}: ${data.toString()}');
+    
+    // Extract discount percentage, ensuring it's an integer
+    int discountPct = 0;
+    if (data['discountPercentage'] != null) {
+      if (data['discountPercentage'] is int) {
+        discountPct = data['discountPercentage'];
+      } else if (data['discountPercentage'] is double) {
+        discountPct = data['discountPercentage'].toInt();
+      } else {
+        try {
+          discountPct = int.parse(data['discountPercentage'].toString());
+        } catch (e) {
+          developer.log('Error parsing discountPercentage: ${data['discountPercentage']}', error: e);
+        }
+      }
+    }
+    
+    // Check if isActive is present and a boolean
+    bool isActive = true;
+    if (data.containsKey('isActive')) {
+      if (data['isActive'] is bool) {
+        isActive = data['isActive'];
+      } else {
+        // Try to parse as string "true" or "false"
+        try {
+          final activeStr = data['isActive'].toString().toLowerCase();
+          isActive = activeStr == 'true' || activeStr == '1';
+        } catch (e) {
+          developer.log('Error parsing isActive field: ${data['isActive']}', error: e);
+        }
+      }
+    }
+    
     return BannerModel(
       id: doc.id,
-      title: data['title'] ?? '',
-      subtitle: data['subtitle'] ?? '',
-      imageUrl: data['imageUrl'] ?? '',
-      discountPercentage: data['discountPercentage'] ?? 0,
-      isActive: data['isActive'] ?? true,
+      title: data['title']?.toString() ?? '',
+      subtitle: data['subtitle']?.toString() ?? '',
+      imageUrl: data['imageUrl']?.toString() ?? '',
+      discountPercentage: discountPct,
+      isActive: isActive,
       createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
       updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(),
     );

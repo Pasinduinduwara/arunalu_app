@@ -12,36 +12,43 @@ class ProductService {
   // Get all products
   Future<List<Map<String, dynamic>>> getAllProducts() async {
     try {
-      developer.log('Fetching all products');
+      developer.log('ProductService: Fetching all products');
       final querySnapshot = await _firestore.collection(_collection).get();
       
-      return querySnapshot.docs.map((doc) {
+      final products = querySnapshot.docs.map((doc) {
         final data = doc.data();
         data['id'] = doc.id; // Include document ID
         return data;
       }).toList();
-    } catch (e) {
-      developer.log('Error fetching products', error: e);
-      throw Exception('Failed to fetch products: $e');
+      
+      developer.log('ProductService: Successfully fetched ${products.length} products');
+      return products;
+    } catch (e, stackTrace) {
+      developer.log('ProductService: Error fetching products', error: e);
+      developer.log('ProductService: Stack trace: $stackTrace');
+      // Return empty list instead of throwing to avoid app crashes
+      return [];
     }
   }
 
   // Get product by ID
   Future<Map<String, dynamic>?> getProduct(String productId) async {
     try {
-      developer.log('Fetching product with ID: $productId');
+      developer.log('ProductService: Fetching product with ID: $productId');
       final docSnapshot = await _firestore.collection(_collection).doc(productId).get();
       
       if (!docSnapshot.exists) {
-        developer.log('Product not found: $productId');
+        developer.log('ProductService: Product not found: $productId');
         return null;
       }
       
       final data = docSnapshot.data()!;
       data['id'] = docSnapshot.id;
+      
+      developer.log('ProductService: Successfully fetched product: $productId');
       return data;
     } catch (e) {
-      developer.log('Error fetching product', error: e);
+      developer.log('ProductService: Error fetching product', error: e);
       throw Exception('Failed to fetch product: $e');
     }
   }
@@ -127,23 +134,82 @@ class ProductService {
     }
   }
 
+  // Get active products for home screen
+  Future<List<Map<String, dynamic>>> getActiveProducts() async {
+    try {
+      developer.log('ProductService: Fetching active products for home screen');
+      
+      // Query only active products
+      final querySnapshot = await _firestore.collection(_collection)
+          .where('isActive', isEqualTo: true)
+          .orderBy('createdAt', descending: true)
+          .get();
+      
+      final products = querySnapshot.docs.map((doc) {
+        final data = doc.data();
+        data['id'] = doc.id; // Include document ID
+        return data;
+      }).toList();
+      
+      developer.log('ProductService: Successfully fetched ${products.length} active products');
+      return products;
+    } catch (e) {
+      developer.log('ProductService: Error fetching active products', error: e);
+      // Return empty list instead of throwing to avoid app crashes
+      return [];
+    }
+  }
+
   // Get products by category
   Future<List<Map<String, dynamic>>> getProductsByCategory(String category) async {
     try {
-      developer.log('Fetching products for category: $category');
-      final querySnapshot = await _firestore
-          .collection(_collection)
-          .where('category', isEqualTo: category)
+      developer.log('ProductService: Fetching products for category: $category');
+      
+      Query query = _firestore.collection(_collection)
+          .where('isActive', isEqualTo: true);
+      
+      if (category != 'All' && category.isNotEmpty) {
+        query = query.where('category', isEqualTo: category);
+      }
+      
+      final querySnapshot = await query.get();
+      
+      final products = querySnapshot.docs.map((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        data['id'] = doc.id; // Include document ID
+        return data;
+      }).toList();
+      
+      developer.log('ProductService: Successfully fetched ${products.length} products for category: $category');
+      return products;
+    } catch (e) {
+      developer.log('ProductService: Error fetching products by category', error: e);
+      return [];
+    }
+  }
+
+  // Get featured products 
+  Future<List<Map<String, dynamic>>> getFeaturedProducts() async {
+    try {
+      developer.log('ProductService: Fetching featured products');
+      
+      final querySnapshot = await _firestore.collection(_collection)
+          .where('isActive', isEqualTo: true)
+          .where('isFeatured', isEqualTo: true)
+          .limit(5)
           .get();
       
-      return querySnapshot.docs.map((doc) {
+      final products = querySnapshot.docs.map((doc) {
         final data = doc.data();
         data['id'] = doc.id;
         return data;
       }).toList();
+      
+      developer.log('ProductService: Successfully fetched ${products.length} featured products');
+      return products;
     } catch (e) {
-      developer.log('Error fetching products by category', error: e);
-      throw Exception('Failed to fetch products by category: $e');
+      developer.log('ProductService: Error fetching featured products', error: e);
+      return [];
     }
   }
 
@@ -169,6 +235,7 @@ class ProductService {
     BoxFit fit = BoxFit.cover
   }) {
     if (base64String == null || base64String.isEmpty) {
+      developer.log('ProductService: Empty base64 string provided');
       return const Icon(Icons.image_not_supported, size: 50);
     }
     
@@ -180,12 +247,12 @@ class ProductService {
         height: height,
         fit: fit,
         errorBuilder: (context, error, stackTrace) {
-          developer.log('Error rendering image', error: error);
+          developer.log('ProductService: Error rendering image', error: error);
           return const Icon(Icons.broken_image, color: Colors.red);
         },
       );
     } catch (e) {
-      developer.log('Error decoding base64', error: e);
+      developer.log('ProductService: Error decoding base64', error: e);
       return const Icon(Icons.error_outline, color: Colors.red);
     }
   }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'firebase_options.dart';
 import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
@@ -17,20 +18,86 @@ import 'services/firebase_auth_service.dart';
 import 'constants/app_constants.dart';
 import 'dart:developer' as developer;
 
+// Set this to true to use demo data without Firebase
+const bool USE_OFFLINE_DEMO_MODE = false;
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
   try {
+    developer.log('Initializing Firebase...');
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
     developer.log('Firebase initialized successfully');
+    
+    // Enable Firestore debug logging in debug mode
+    FirebaseFirestore.instance.settings = 
+        const Settings(persistenceEnabled: true);
+        
+    // Only test connectivity if we're not in demo mode
+    if (!USE_OFFLINE_DEMO_MODE) {
+      await _testFirestoreConnectivity();
+    } else {
+      developer.log('Using offline demo mode - Firebase data will not be fetched');
+    }
   } catch (e) {
-    developer.log('Error initializing Firebase: $e');
-    // Continue to show the app with appropriate error handling
+    developer.log('Error initializing Firebase', error: e);
+    developer.log('App will continue in offline demo mode');
   }
   
   runApp(const MyApp());
+}
+
+// Test Firestore connectivity for all collections
+Future<void> _testFirestoreConnectivity() async {
+  final firestore = FirebaseFirestore.instance;
+  
+  try {
+    // Test banners collection in detail
+    developer.log('Testing banners collection connectivity...');
+    final bannersDocs = await firestore.collection('banners').get();
+    developer.log('Banners collection access: ${bannersDocs.docs.length} documents found');
+    
+    // Log details of each banner to verify content
+    if (bannersDocs.docs.isNotEmpty) {
+      developer.log('Banner details:');
+      for (var doc in bannersDocs.docs) {
+        final data = doc.data();
+        developer.log('Banner ID: ${doc.id}');
+        developer.log('  - title: ${data['title']}');
+        developer.log('  - isActive: ${data['isActive']}');
+        developer.log('  - discountPercentage: ${data['discountPercentage']}');
+      }
+      
+      // Test the filter query specifically
+      final activeBanners = await firestore.collection('banners')
+        .where('isActive', isEqualTo: true)
+        .get();
+      developer.log('Active banners: ${activeBanners.docs.length} documents found');
+    }
+    
+    // Test categories collection
+    final categoriesDocs = await firestore.collection('categories').limit(1).get();
+    developer.log('Categories collection access: ${categoriesDocs.docs.length} documents found');
+    
+    // Test products collection
+    final productsDocs = await firestore.collection('products').limit(1).get();
+    developer.log('Products collection access: ${productsDocs.docs.length} documents found');
+    
+    // Test services collection
+    final servicesDocs = await firestore.collection('services').limit(1).get();
+    developer.log('Services collection access: ${servicesDocs.docs.length} documents found');
+    
+    // Test appointment types collection
+    final appointmentTypesDocs = await firestore.collection('appointmentTypes').limit(1).get();
+    developer.log('Appointment types collection access: ${appointmentTypesDocs.docs.length} documents found');
+    
+    developer.log('All Firestore collections are accessible');
+  } catch (e) {
+    developer.log('Error testing Firestore collections', error: e);
+    // Continue anyway
+  }
 }
 
 class MyApp extends StatelessWidget {
@@ -42,12 +109,27 @@ class MyApp extends StatelessWidget {
       title: 'Arunalu Technics',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: AppConstants.primaryColor),
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: AppConstants.primaryColor,
+          primary: AppConstants.primaryColor,
+          secondary: Colors.amber,
+        ),
         useMaterial3: true,
         scaffoldBackgroundColor: Colors.white,
         appBarTheme: AppBarTheme(
           backgroundColor: AppConstants.primaryColor,
           foregroundColor: Colors.white,
+          elevation: 2,
+        ),
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppConstants.primaryColor,
+            foregroundColor: Colors.white,
+          ),
+        ),
+        textTheme: const TextTheme(
+          titleLarge: TextStyle(fontWeight: FontWeight.bold),
+          titleMedium: TextStyle(fontWeight: FontWeight.w600),
         ),
       ),
       home: const AuthenticationWrapper(),

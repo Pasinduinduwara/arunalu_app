@@ -10,7 +10,7 @@ class ServiceService {
   // Get all services
   Future<List<ServiceModel>> getAllServices({bool activeOnly = false}) async {
     try {
-      developer.log('Fetching all services, activeOnly: $activeOnly');
+      developer.log('ServiceService: Fetching all services, activeOnly: $activeOnly');
       
       Query query = _firestore.collection(_collection);
       
@@ -24,12 +24,18 @@ class ServiceService {
       
       final querySnapshot = await query.get();
       
-      return querySnapshot.docs
+      final services = querySnapshot.docs
           .map((doc) => ServiceModel.fromFirestore(doc))
           .toList();
-    } catch (e) {
-      developer.log('Error fetching services', error: e);
-      throw Exception('Failed to fetch services: $e');
+          
+      developer.log('ServiceService: Successfully fetched ${services.length} services');
+      return services;
+    } catch (e, stackTrace) {
+      developer.log('ServiceService: Error fetching services', error: e);
+      developer.log('ServiceService: Stack trace: $stackTrace');
+      
+      // Return empty list instead of throwing to avoid crashing the app
+      return [];
     }
   }
 

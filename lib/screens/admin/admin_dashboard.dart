@@ -248,7 +248,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                     children: [
                       Expanded(
                         child: StatsCard(
-                          title: 'Appointment Types',
+                          title: 'Appointment',
                           value: _totalAppointmentTypes.toString(),
                           icon: Icons.calendar_today,
                           color: Colors.red,
