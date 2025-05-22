@@ -9,6 +9,10 @@ import 'screens/forgot_password_screen.dart';
 import 'screens/admin/admin_dashboard.dart';
 import 'screens/admin/admin_users_screen.dart';
 import 'screens/admin/admin_products_screen.dart';
+import 'screens/admin/admin_banners_screen.dart';
+import 'screens/admin/admin_categories_screen.dart';
+import 'screens/admin/admin_appointment_types_screen.dart';
+import 'screens/admin/admin_services_screen.dart';
 import 'services/firebase_auth_service.dart';
 import 'constants/app_constants.dart';
 import 'dart:developer' as developer;
@@ -53,6 +57,13 @@ class MyApp extends StatelessWidget {
         '/admin': (context) => const AdminDashboard(),
         '/admin_users': (context) => const AdminUsersScreen(),
         '/admin_products': (context) => const AdminProductsScreen(),
+        '/admin/dashboard': (context) => const AdminDashboard(),
+        '/admin/users': (context) => const AdminUsersScreen(),
+        '/admin/products': (context) => const AdminProductsScreen(),
+        '/admin/banners': (context) => const AdminBannersScreen(),
+        '/admin/categories': (context) => const AdminCategoriesScreen(),
+        '/admin/appointment-types': (context) => const AdminAppointmentTypesScreen(),
+        '/admin/services': (context) => const AdminServicesScreen(),
         '/signup': (context) => const SignupScreen(),
         '/forgot_password': (context) => const ForgotPasswordScreen(),
       },

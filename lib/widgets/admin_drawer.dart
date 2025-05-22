@@ -9,6 +9,10 @@ enum AdminScreen {
   dashboard,
   users,
   products,
+  banners,
+  categories,
+  appointmentTypes,
+  services
 }
 
 class AdminDrawer extends StatelessWidget {
@@ -134,6 +138,66 @@ class AdminDrawer extends StatelessWidget {
                 Navigator.of(context).pushReplacement(
                   MaterialPageRoute(builder: (context) => const AdminProductsScreen()),
                 );
+              } else {
+                Navigator.pop(context);
+              }
+            },
+          ),
+          
+          // Banners
+          _buildDrawerItem(
+            context: context,
+            title: 'Banners/Offers',
+            icon: Icons.collections,
+            isSelected: currentScreen == AdminScreen.banners,
+            onTap: () {
+              if (currentScreen != AdminScreen.banners) {
+                Navigator.of(context).pushReplacementNamed('/admin/banners');
+              } else {
+                Navigator.pop(context);
+              }
+            },
+          ),
+          
+          // Categories
+          _buildDrawerItem(
+            context: context,
+            title: 'Categories',
+            icon: Icons.category,
+            isSelected: currentScreen == AdminScreen.categories,
+            onTap: () {
+              if (currentScreen != AdminScreen.categories) {
+                Navigator.of(context).pushReplacementNamed('/admin/categories');
+              } else {
+                Navigator.pop(context);
+              }
+            },
+          ),
+          
+          // Appointment Types
+          _buildDrawerItem(
+            context: context,
+            title: 'Appointment Types',
+            icon: Icons.calendar_today,
+            isSelected: currentScreen == AdminScreen.appointmentTypes,
+            onTap: () {
+              if (currentScreen != AdminScreen.appointmentTypes) {
+                Navigator.of(context).pushReplacementNamed('/admin/appointment-types');
+              } else {
+                Navigator.pop(context);
+              }
+            },
+          ),
+          
+          // Services
+          _buildDrawerItem(
+            context: context,
+            title: 'Services',
+            icon: Icons.miscellaneous_services,
+            isSelected: currentScreen == AdminScreen.services,
+            onTap: () {
+              if (currentScreen != AdminScreen.services) {
+                Navigator.of(context).pushReplacementNamed('/admin/services');
               } else {
                 Navigator.pop(context);
               }
