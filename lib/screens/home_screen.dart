@@ -9,6 +9,7 @@ import '../services/product_service.dart';
 import '../models/banner_model.dart';
 import '../models/category_model.dart';
 import '../models/service_model.dart';
+import '../models/appointment_model.dart';
 import 'dart:developer' as developer;
 
 // Import the offline demo mode constant
@@ -67,6 +68,8 @@ class _HomeScreenState extends State<HomeScreen> {
       // Otherwise load data from Firebase
       developer.log('HomeScreen: Attempting to load data from Firebase');
       _loadHomePageData();
+      // Load products immediately for initial display
+      _loadProductsByCategory('All');
     }
   }
 
@@ -245,19 +248,22 @@ class _HomeScreenState extends State<HomeScreen> {
       final categories = await _categoryService.getAllCategories(activeOnly: true);
       developer.log('HomeScreen: Successfully loaded ${categories.length} categories');
       
-      // Load active products - use the enhanced method
+      // IMPORTANT: Load all products directly to debug  
+      developer.log('HomeScreen: Loading ALL products for debugging');
+      List<Map<String, dynamic>> allProducts = await _productService.getAllProducts();
+      developer.log('HomeScreen: Found ${allProducts.length} TOTAL products in database');
+      
+      // Log first few products to see their structure
+      for (var product in allProducts.take(3)) {
+        developer.log('HomeScreen: Product from DB - ID: ${product['id']}, Title: ${product['title']}');
+        developer.log('HomeScreen: Product details - Price: ${product['price']}, Category: ${product['category']}');
+        developer.log('HomeScreen: Product active? ${product['isActive']}, featured? ${product['isFeatured']}');
+      }
+      
+      // Load active products directly - simplify to debug
       developer.log('HomeScreen: Loading active products');
       final activeProducts = await _productService.getActiveProducts();
       developer.log('HomeScreen: Successfully loaded ${activeProducts.length} active products');
-      
-      // Load featured products separately if available
-      List<Map<String, dynamic>> featuredProducts = [];
-      try {
-        featuredProducts = await _productService.getFeaturedProducts();
-        developer.log('HomeScreen: Successfully loaded ${featuredProducts.length} featured products');
-      } catch (e) {
-        developer.log('HomeScreen: Error loading featured products, will use active products instead', error: e);
-      }
       
       // Load services
       developer.log('HomeScreen: Loading services');
@@ -293,30 +299,17 @@ class _HomeScreenState extends State<HomeScreen> {
             ];
           }
           
-          // If we have featured products or active products, use those for display
-          if (featuredProducts.isNotEmpty || activeProducts.isNotEmpty) {
-            if (featuredProducts.isNotEmpty) {
-              _popularProducts = featuredProducts;
-              developer.log('HomeScreen: Using ${_popularProducts.length} featured products for popular section');
-              
-              // For spare parts, use non-featured active products
-              _sparePartsProducts = activeProducts
-                  .where((product) => !featuredProducts.any((featured) => featured['id'] == product['id']))
-                  .take(4)
-                  .toList();
+          // IMPORTANT: Directly use the active products for display
+          if (activeProducts.isNotEmpty) {
+            _popularProducts = activeProducts.take(4).toList();
+            developer.log('HomeScreen: Added ${_popularProducts.length} products to popular section');
+            
+            // Spare parts - get the next products if available
+            if (activeProducts.length > 4) {
+              _sparePartsProducts = activeProducts.skip(4).take(4).toList();
+              developer.log('HomeScreen: Added ${_sparePartsProducts.length} products to spare parts section');
             } else {
-              // Otherwise just split the active products between popular and spare parts
-              _popularProducts = activeProducts.take(activeProducts.length < 5 ? activeProducts.length : 5).toList();
-              developer.log('HomeScreen: Added ${_popularProducts.length} active products to popular section');
-              
-              // Spare parts - get the next 4 if available
-              if (activeProducts.length > 5) {
-                _sparePartsProducts = activeProducts.skip(5).take(4).toList();
-                developer.log('HomeScreen: Added ${_sparePartsProducts.length} active products to spare parts section');
-              } else {
-                _sparePartsProducts = [];
-                developer.log('HomeScreen: No products available for spare parts section');
-              }
+              _sparePartsProducts = [];
             }
           } else if (_popularProducts.isEmpty) {
             // Create demo products if no real products are available
@@ -402,6 +395,8 @@ class _HomeScreenState extends State<HomeScreen> {
     // Prevent overflow with MediaQuery
     final bottomPadding = MediaQuery.of(context).padding.bottom;
     final bottomNavHeight = kBottomNavigationBarHeight + bottomPadding;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final screenHeight = MediaQuery.of(context).size.height;
     
     return Scaffold(
       backgroundColor: Colors.white,
@@ -467,7 +462,10 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
       body: RefreshIndicator(
-        onRefresh: _loadHomePageData,
+        onRefresh: () async {
+          await _loadHomePageData();
+          await _loadProductsByCategory(_selectedCategory == 0 ? 'All' : _categoryNames[_selectedCategory]);
+        },
         child: _isLoading 
         ? const Center(child: CircularProgressIndicator())
         : _errorMessage != null
@@ -508,150 +506,86 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
             )
-          : SingleChildScrollView(
+          : ListView(
               physics: const AlwaysScrollableScrollPhysics(),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Welcome section
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const SizedBox(height: 16),
-                        Text(
-                          'Welcome Back, $_username',
-                          style: const TextStyle(
-                            fontSize: 28,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                      ],
-                    ),
-                  ),
-                  
-                  // Banner slider
-                  _buildBannerSlider(),
-                  
-                  // Banner indicator
-                  if (_banners.isNotEmpty) ...[
-                    const SizedBox(height: 16),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: List.generate(_banners.length, (index) {
-                        return Container(
-                          margin: const EdgeInsets.symmetric(horizontal: 4),
-                          width: 10,
-                          height: 10,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: _currentBannerIndex == index 
-                                ? AppConstants.primaryColor
-                                : Colors.grey[300],
-                          ),
-                        );
-                      }),
-                    ),
-                  ],
-                  const SizedBox(height: 32),
-      
-                  // Categories
-                  if (_categories.isNotEmpty) ...[
-                    const Padding(
-                      padding: EdgeInsets.only(left: 16.0),
-                      child: Text(
-                        'Categories',
-                        style: TextStyle(
-                          fontSize: 22,
+              padding: EdgeInsets.only(bottom: bottomNavHeight + 24), // Extra padding at bottom
+              children: [
+                // Welcome section
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SizedBox(height: 16),
+                      Text(
+                        'Welcome Back, $_username',
+                        style: const TextStyle(
+                          fontSize: 28,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 16),
-                    _buildCategoriesSection(),
-                    const SizedBox(height: 24),
-                  ],
-      
-                  // Appointments section
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Appointments',
-                          style: TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.bold,
-                          ),
+                      const SizedBox(height: 16),
+                    ],
+                  ),
+                ),
+                
+                // Banner slider
+                _buildBannerSlider(),
+                
+                // Banner indicator
+                if (_banners.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: List.generate(_banners.length, (index) {
+                      return Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 4),
+                        width: 10,
+                        height: 10,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: _currentBannerIndex == index 
+                              ? AppConstants.primaryColor
+                              : Colors.grey[300],
                         ),
-                        const SizedBox(height: 16),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Container(
-                                height: 50,
-                                decoration: BoxDecoration(
-                                  color: Colors.grey[200],
-                                  borderRadius: BorderRadius.circular(25),
-                                ),
-                                child: const Center(
-                                  child: Text(
-                                    'Normal',
-                                    style: TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: Container(
-                                height: 50,
-                                decoration: BoxDecoration(
-                                  color: Colors.red[400],
-                                  borderRadius: BorderRadius.circular(25),
-                                ),
-                                child: const Center(
-                                  child: Text(
-                                    'Emergency',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
+                      );
+                    }),
+                  ),
+                ],
+                const SizedBox(height: 24), // Reduced padding
+    
+                // Categories
+                if (_categories.isNotEmpty) ...[
+                  const Padding(
+                    padding: EdgeInsets.only(left: 16.0),
+                    child: Text(
+                      'Categories',
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 32),
-                  
-                  // Popular Products
-                  _buildPopularProductsSection(),
-                  const SizedBox(height: 24),
-                  
-                  // Spare parts section - only show when on All category and we have spare parts
-                  if (_selectedCategory == 0 && _sparePartsProducts.isNotEmpty)
-                    _buildSparePartsSection(),
-                  if (_selectedCategory == 0 && _sparePartsProducts.isNotEmpty)
-                    const SizedBox(height: 24),
-      
-                  // Services section
-                  _buildServicesSection(),
-                  
-                  // Bottom padding to avoid overflow
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 12), // Reduced padding
+                  _buildCategoriesSection(),
+                  const SizedBox(height: 16), // Reduced padding
                 ],
-              ),
+    
+                // Appointments section
+                _buildAppointmentSection(),
+                const SizedBox(height: 16), // Reduced padding
+                
+                // Popular Products
+                _buildPopularProductsSection(),
+                const SizedBox(height: 16), // Reduced padding
+                
+                // Spare parts section - only show when on All category
+                if (_selectedCategory == 0)
+                  _buildSparePartsSection(),
+                
+                // Services section
+                _buildServicesSection(),
+              ],
             ),
       ),
       bottomNavigationBar: Container(
@@ -1094,6 +1028,7 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
     
+    developer.log('HomeScreen: Building categories section with ${_categories.length} categories');
     return SizedBox(
       height: 40,
       child: ListView.builder(
@@ -1195,32 +1130,144 @@ class _HomeScreenState extends State<HomeScreen> {
         return;
       }
       
-      // Normal Firebase data loading
-      final products = await _productService.getProductsByCategory(category);
-      
-      developer.log('HomeScreen: Loaded ${products.length} products for category: $category');
-      
-      if (mounted) {
-        setState(() {
-          if (products.isNotEmpty) {
-            // Show all products in the popular section when filtering by category
-            _popularProducts = products;
-            _sparePartsProducts = []; // Don't show spare parts section when category filtered
+      try {
+        // Normal Firebase data loading
+        List<Map<String, dynamic>> products = [];
+        
+        // For "All" category, load all products
+        if (category == 'All') {
+          // First try to get featured products
+          try {
+            products = await _productService.getFeaturedProducts();
+            developer.log('HomeScreen: Fetched ${products.length} featured products');
+          } catch (e) {
+            developer.log('HomeScreen: Error fetching featured products', error: e);
+            products = [];
+          }
+          
+          // If no featured products available, get all active products
+          if (products.isEmpty) {
+            try {
+              products = await _productService.getActiveProducts();
+              developer.log('HomeScreen: Fetched ${products.length} active products (no featured found)');
+            } catch (e) {
+              developer.log('HomeScreen: Error fetching active products', error: e);
+              products = [];
+            }
+          }
+        } else {
+          // Get products filtered by category
+          try {
+            products = await _productService.getProductsByCategory(category);
+            developer.log('HomeScreen: Loaded ${products.length} products for category: $category');
+          } catch (e) {
+            developer.log('HomeScreen: Error fetching products by category', error: e);
+            products = [];
+          }
+        }
+        
+        // Process products based on loaded data
+        if (products.isNotEmpty) {
+          developer.log('HomeScreen: Processing ${products.length} products');
+          
+          // Debug log product details
+          for (var product in products.take(3)) {
+            developer.log('HomeScreen: Product: ${product['title']}, Price: ${product['price']}, Category: ${product['category']}');
+            if (product.containsKey('imageBase64')) {
+              developer.log('HomeScreen: Product has base64 image');
+            } else if (product.containsKey('imageUrl')) {
+              developer.log('HomeScreen: Product has URL image: ${product['imageUrl']}');
+            } else {
+              developer.log('HomeScreen: Product has no image');
+            }
+          }
+          
+          // For "All" category, split products between popular and spare parts
+          if (category == 'All') {
+            if (products.length > 3) {
+              _popularProducts = products.sublist(0, 3);
+              
+              // Remaining products for spare parts (up to 4)
+              final remaining = products.length - 3;
+              final count = remaining > 4 ? 4 : remaining;
+              _sparePartsProducts = products.sublist(3, 3 + count);
+            } else {
+              _popularProducts = products;
+              _sparePartsProducts = [];
+            }
+            
+            developer.log('HomeScreen: Split products - Popular: ${_popularProducts.length}, Spare Parts: ${_sparePartsProducts.length}');
           } else {
-            // If no products in category, show a message
-            _popularProducts = [];
+            // For specific category, all products go to popular section
+            _popularProducts = products;
+            _sparePartsProducts = [];
+            developer.log('HomeScreen: Category products - Popular: ${_popularProducts.length}');
+          }
+        } else {
+          // No products found
+          developer.log('HomeScreen: No products found to display');
+          
+          if (category == 'All') {
+            // For "All" category with no products, use placeholders
+            _popularProducts = [
+              {
+                "id": "sample1",
+                "title": "Sample Product 1",
+                "price": "1200",
+                "category": "Electronics",
+                "imageUrl": "https://placehold.co/400x400/blue/white?text=Sample+1"
+              },
+              {
+                "id": "sample2",
+                "title": "Sample Product 2",
+                "price": "1800",
+                "category": "Tools",
+                "imageUrl": "https://placehold.co/400x400/blue/white?text=Sample+2"
+              }
+            ];
+            _sparePartsProducts = [];
+          } else {
+            // For specific category with no products
+            _popularProducts = [
+              {
+                "id": "${category.toLowerCase()}1",
+                "title": "$category Item",
+                "price": "2500",
+                "category": category,
+                "imageUrl": "https://placehold.co/400x400/blue/white?text=$category"
+              }
+            ];
             _sparePartsProducts = [];
           }
+        }
+        
+        setState(() {
+          _isLoadingProducts = false;
+        });
+        
+      } catch (e) {
+        developer.log('HomeScreen: Error in product loading', error: e);
+        
+        // Create some dummy products if loading fails
+        setState(() {
+          _popularProducts = [
+            {
+              "id": "error1",
+              "title": "Sample Product",
+              "price": "1500",
+              "category": "Sample",
+              "imageUrl": "https://placehold.co/400x400/red/white?text=Error+Loading"
+            }
+          ];
+          _sparePartsProducts = [];
           _isLoadingProducts = false;
         });
       }
     } catch (e) {
-      developer.log('HomeScreen: Error loading products by category', error: e);
-      if (mounted) {
-        setState(() {
-          _isLoadingProducts = false;
-        });
-      }
+      developer.log('HomeScreen: Critical error loading products', error: e);
+      setState(() {
+        _isLoadingProducts = false;
+      });
     }
   }
 
@@ -1232,7 +1279,7 @@ class _HomeScreenState extends State<HomeScreen> {
       // Show loading indicator
       content = Center(
         child: SizedBox(
-          height: 230,
+          height: 200, // Reduced fixed height
           child: Center(
             child: CircularProgressIndicator(
               color: AppConstants.primaryColor,
@@ -1243,19 +1290,19 @@ class _HomeScreenState extends State<HomeScreen> {
     } else if (_popularProducts.isEmpty) {
       // Show placeholder products if none are available
       content = SizedBox(
-        height: 230,
+        height: 200, // Reduced fixed height
         child: _selectedCategory == 0 
             ? ListView(
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.only(left: 16.0, right: 8.0),
                 children: [
                   Container(
-                    width: 180,
+                    width: 160, // Reduced width
                     margin: const EdgeInsets.only(right: 16),
                     child: _buildPlaceholderProductCard("Sample Product 1", "Rs 1200", Colors.blue[50]!),
                   ),
                   Container(
-                    width: 180,
+                    width: 160, // Reduced width
                     margin: const EdgeInsets.only(right: 16),
                     child: _buildPlaceholderProductCard("Sample Product 2", "Rs 1800", Colors.grey[200]!),
                   ),
@@ -1281,8 +1328,10 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     } else {
       // Show actual products
+      developer.log('HomeScreen: Building product list UI with ${_popularProducts.length} products');
+      
       content = SizedBox(
-        height: 230,
+        height: 200, // Reduced fixed height
         child: ListView.builder(
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.only(left: 16.0, right: 8.0),
@@ -1291,18 +1340,39 @@ class _HomeScreenState extends State<HomeScreen> {
             final product = _popularProducts[index];
             final productId = product['id'] ?? '';
             
+            // Ensure we handle all possible data types for price
+            String priceText = 'Rs 0';
+            if (product.containsKey('price')) {
+              var price = product['price'];
+              if (price is int) {
+                priceText = 'Rs $price';
+              } else if (price is double) {
+                priceText = 'Rs ${price.toStringAsFixed(2)}';
+              } else if (price is String) {
+                priceText = 'Rs $price';
+              } else {
+                priceText = 'Rs 0';
+              }
+            }
+            
+            final title = product['title'] ?? 'Product';
+            final category = product['category'] ?? '';
+            
             // Handle image - check for both imageUrl and imageBase64
             Widget productImage = _getProductImage(product);
             
-            return Container(
-              width: 180,
-              margin: const EdgeInsets.only(right: 16),
-              child: _buildProductCard(
-                id: productId,
-                name: product['title'] ?? 'Product',
-                price: 'Rs ${product['price'] ?? '0'}',
-                productImage: productImage,
-                bgColor: index % 2 == 0 ? Colors.blue[50] : Colors.grey[200],
+            return GestureDetector(
+              onTap: () => _viewProductDetails(product),
+              child: Container(
+                width: 160, // Reduced width
+                margin: const EdgeInsets.only(right: 16),
+                child: _buildProductCard(
+                  id: productId,
+                  name: title,
+                  price: priceText,
+                  productImage: productImage,
+                  bgColor: index % 2 == 0 ? Colors.blue[50] : Colors.grey[200],
+                ),
               ),
             );
           },
@@ -1323,7 +1393,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 12), // Reduced padding
         content,
       ],
     );
@@ -1387,116 +1457,73 @@ class _HomeScreenState extends State<HomeScreen> {
   // Update the spare parts section
   Widget _buildSparePartsSection() {
     if (_sparePartsProducts.isEmpty) {
-      // Show placeholder products if none are available
-      return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Spare Parts For You',
-              style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 16),
-            
-            // First row
-            Row(
-              children: [
-                Expanded(
-                  child: _buildPlaceholderProductCard(
-                    "Spare Part 1",
-                    "Rs 800",
-                    Colors.blue[50]!,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: _buildPlaceholderProductCard(
-                    "Spare Part 2",
-                    "Rs 1500",
-                    Colors.grey[200]!,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      );
+      // Don't show the section if no spare parts available
+      return const SizedBox.shrink();
     }
     
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+    developer.log('HomeScreen: Building spare parts section with ${_sparePartsProducts.length} products');
+    
+    // Calculate item count to avoid having a partial row
+    final itemCount = _sparePartsProducts.length > 4 ? 4 : _sparePartsProducts.length; // Limit to max 4 items
+    
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Spare Parts For You',
+            'Spare Parts',
             style: TextStyle(
               fontSize: 22,
               fontWeight: FontWeight.bold,
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12), // Reduced spacing
           
-          // First row
-          if (_sparePartsProducts.length >= 2)
-            Row(
-              children: [
-                Expanded(
-                  child: _buildProductCard(
-                    id: _sparePartsProducts[0]['id'] ?? '',
-                    name: _sparePartsProducts[0]['title'] ?? 'Product',
-                    price: 'Rs ${_sparePartsProducts[0]['price'] ?? '0'}',
-                    productImage: _getProductImage(_sparePartsProducts[0]),
-                    bgColor: Colors.blue[50],
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: _buildProductCard(
-                    id: _sparePartsProducts[1]['id'] ?? '',
-                    name: _sparePartsProducts[1]['title'] ?? 'Product',
-                    price: 'Rs ${_sparePartsProducts[1]['price'] ?? '0'}',
-                    productImage: _getProductImage(_sparePartsProducts[1]),
-                    bgColor: Colors.grey[200],
-                  ),
-                ),
-              ],
-            ),
-          
-          // Second row
-          if (_sparePartsProducts.length >= 4)
-            Column(
-              children: [
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _buildProductCard(
-                        id: _sparePartsProducts[2]['id'] ?? '',
-                        name: _sparePartsProducts[2]['title'] ?? 'Product',
-                        price: 'Rs ${_sparePartsProducts[2]['price'] ?? '0'}',
-                        productImage: _getProductImage(_sparePartsProducts[2]),
-                        bgColor: Colors.grey[200],
-                      ),
+          // Use fixed height container with Row layout
+          Container(
+            height: 200, // Fixed height to prevent overflow
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              itemCount: itemCount,
+              itemBuilder: (context, index) {
+                final product = _sparePartsProducts[index];
+                
+                // Ensure we handle all possible data types for price
+                String priceText = 'Rs 0';
+                if (product.containsKey('price')) {
+                  var price = product['price'];
+                  if (price is int) {
+                    priceText = 'Rs $price';
+                  } else if (price is double) {
+                    priceText = 'Rs ${price.toStringAsFixed(2)}';
+                  } else if (price is String) {
+                    priceText = 'Rs $price';
+                  } else {
+                    priceText = 'Rs 0';
+                  }
+                }
+                
+                final productId = product['id'] ?? '';
+                final title = product['title'] ?? 'Product';
+                
+                return GestureDetector(
+                  onTap: () => _viewProductDetails(product),
+                  child: Container(
+                    width: 160,
+                    margin: const EdgeInsets.only(right: 16),
+                    child: _buildProductCard(
+                      id: productId,
+                      name: title,
+                      price: priceText,
+                      productImage: _getProductImage(product),
+                      bgColor: index % 2 == 0 ? Colors.grey[200] : Colors.blue[50],
                     ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: _buildProductCard(
-                        id: _sparePartsProducts[3]['id'] ?? '',
-                        name: _sparePartsProducts[3]['title'] ?? 'Product',
-                        price: 'Rs ${_sparePartsProducts[3]['price'] ?? '0'}',
-                        productImage: _getProductImage(_sparePartsProducts[3]),
-                        bgColor: Colors.blue[50],
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+                  ),
+                );
+              },
             ),
+          ),
         ],
       ),
     );
@@ -1504,47 +1531,60 @@ class _HomeScreenState extends State<HomeScreen> {
   
   // Helper method to get product image widget
   Widget _getProductImage(Map<String, dynamic> product) {
+    // First check for base64 encoded image
     if (product.containsKey('imageBase64') && product['imageBase64'] != null && product['imageBase64'].toString().isNotEmpty) {
       try {
+        developer.log('HomeScreen: Using base64 image for: ${product['title']}');
         // Use product service to convert base64 to image
         return _productService.safeBase64ToImage(
           product['imageBase64'],
-          fit: BoxFit.contain,
-        );
-      } catch (e) {
-        developer.log('Error displaying base64 image: $e');
-      }
-    } 
-    
-    if (product.containsKey('imageUrl') && product['imageUrl'] != null && product['imageUrl'].toString().isNotEmpty) {
-      try {
-        // Use network image
-        return Image.network(
-          product['imageUrl'],
-          fit: BoxFit.contain,
+          fit: BoxFit.cover,
           errorBuilder: (context, error, stackTrace) {
-            developer.log('Error loading network image: $error');
+            developer.log('HomeScreen: Error rendering base64 image', error: error);
             return Container(
               color: Colors.grey[200],
-              child: const Icon(Icons.image, size: 50),
+              child: const Icon(Icons.image_not_supported, size: 50),
             );
           },
         );
       } catch (e) {
-        developer.log('Error displaying URL image: $e');
+        developer.log('HomeScreen: Error processing base64 image', error: e);
+      }
+    }
+    
+    // Then check for image URL
+    if (product.containsKey('imageUrl') && product['imageUrl'] != null && product['imageUrl'].toString().isNotEmpty) {
+      try {
+        developer.log('HomeScreen: Using URL image for: ${product['title']}');
+        // Use network image
+        return Image.network(
+          product['imageUrl'],
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) {
+            developer.log('HomeScreen: Error loading network image', error: error);
+            return Container(
+              color: Colors.grey[200],
+              child: const Icon(Icons.image_not_supported, size: 50),
+            );
+          },
+        );
+      } catch (e) {
+        developer.log('HomeScreen: Error processing URL image', error: e);
       }
     }
     
     // Fallback image
+    developer.log('HomeScreen: Using fallback image for: ${product['title']}');
     return Container(
       color: Colors.grey[200],
-      child: const Icon(Icons.image, size: 50, color: Colors.grey),
+      child: Icon(Icons.image, size: 50, color: Colors.grey[400]),
     );
   }
   
   // Update the services section
   Widget _buildServicesSection() {
     if (_services.isEmpty) {
+      developer.log('HomeScreen: No services available, showing placeholders');
       return Container(
         padding: const EdgeInsets.all(16.0),
         color: Colors.grey[100],
@@ -1579,6 +1619,7 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
     
+    developer.log('HomeScreen: Building services section with ${_services.length} services');
     return Container(
       padding: const EdgeInsets.all(16.0),
       color: Colors.grey[100],
@@ -1598,15 +1639,18 @@ class _HomeScreenState extends State<HomeScreen> {
             scrollDirection: Axis.horizontal,
             child: Row(
               mainAxisAlignment: MainAxisAlignment.start,
-              children: _services.map((service) => 
-                Padding(
-                  padding: const EdgeInsets.only(right: 16.0),
-                  child: _buildServiceItem(
-                    _serviceService.getIconDataFromName(service.iconName),
-                    service.name,
-                  ),
-                )
-              ).toList(),
+              children: _services
+                .where((service) => service.isActive) // Only show active services
+                .map((service) {
+                  developer.log('HomeScreen: Adding service to UI: ${service.name}, icon: ${service.iconName}');
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 16.0),
+                    child: _buildServiceItem(
+                      _serviceService.getIconDataFromName(service.iconName),
+                      service.name,
+                    ),
+                  );
+                }).toList(),
             ),
           ),
         ],
@@ -1680,76 +1724,335 @@ class _HomeScreenState extends State<HomeScreen> {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
         color: bgColor ?? Colors.grey[100],
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 5,
+            spreadRadius: 1,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Stack(
-            children: [
-              AspectRatio(
-                aspectRatio: 1,
-                child: ClipRRect(
+          // Fixed height for image container
+          SizedBox(
+            height: 120, // Reduced fixed height
+            child: Stack(
+              children: [
+                ClipRRect(
                   borderRadius: const BorderRadius.only(
                     topLeft: Radius.circular(16),
                     topRight: Radius.circular(16),
                   ),
-                  child: productImage,
+                  child: SizedBox(
+                    width: double.infinity,
+                    height: 120, // Must match parent height
+                    child: productImage,
+                  ),
                 ),
-              ),
-              Positioned(
-                top: 8,
-                right: 8,
-                child: InkWell(
-                  onTap: () => _toggleFavorite(id),
-                  child: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.1),
-                          spreadRadius: 1,
-                          blurRadius: 2,
-                        ),
-                      ],
-                    ),
-                    child: Icon(
-                      _favoriteItems[id] == true 
-                          ? Icons.favorite
-                          : Icons.favorite_border,
-                      color: _favoriteItems[id] == true ? Colors.red : Colors.grey,
-                      size: 20,
+                Positioned(
+                  top: 8,
+                  right: 8,
+                  child: InkWell(
+                    onTap: () => _toggleFavorite(id),
+                    child: Container(
+                      padding: const EdgeInsets.all(6), // Reduced
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.1),
+                            spreadRadius: 1,
+                            blurRadius: 2,
+                          ),
+                        ],
+                      ),
+                      child: Icon(
+                        _favoriteItems[id] == true 
+                            ? Icons.favorite
+                            : Icons.favorite_border,
+                        color: _favoriteItems[id] == true ? Colors.red : Colors.grey,
+                        size: 18, // Reduced
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
+          // Fixed height for text content
           Padding(
-            padding: const EdgeInsets.all(12.0),
+            padding: const EdgeInsets.all(8.0), // Reduced padding
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   name,
                   style: const TextStyle(
-                    fontSize: 14,
+                    fontSize: 12, // Reduced
                     fontWeight: FontWeight.bold,
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 2), // Reduced
                 Text(
                   price,
-                  style: const TextStyle(
-                    fontSize: 16,
+                  style: TextStyle(
+                    fontSize: 14, // Reduced
                     fontWeight: FontWeight.bold,
+                    color: AppConstants.primaryColor,
                   ),
                 ),
               ],
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAppointmentSection() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Appointments',
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 16),
+          FutureBuilder<List<AppointmentTypeModel>>(
+            future: _appointmentTypeService.getAllAppointmentTypes(activeOnly: true),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return Center(
+                  child: SizedBox(
+                    height: 50,
+                    child: CircularProgressIndicator(color: AppConstants.primaryColor),
+                  ),
+                );
+              }
+              
+              final appointmentTypes = snapshot.data ?? [];
+              
+              // If no appointment types defined, show default buttons
+              if (appointmentTypes.isEmpty) {
+                return Row(
+                  children: [
+                    Expanded(
+                      child: Container(
+                        height: 50,
+                        decoration: BoxDecoration(
+                          color: Colors.grey[200],
+                          borderRadius: BorderRadius.circular(25),
+                        ),
+                        child: const Center(
+                          child: Text(
+                            'Normal',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Container(
+                        height: 50,
+                        decoration: BoxDecoration(
+                          color: Colors.red[400],
+                          borderRadius: BorderRadius.circular(25),
+                        ),
+                        child: const Center(
+                          child: Text(
+                            'Emergency',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              }
+              
+              // Show appointment types from admin panel
+              return SizedBox(
+                height: 60,
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: appointmentTypes.length,
+                  itemBuilder: (context, index) {
+                    final type = appointmentTypes[index];
+                    return Container(
+                      width: 150,
+                      margin: const EdgeInsets.only(right: 12),
+                      decoration: BoxDecoration(
+                        color: type.color,
+                        borderRadius: BorderRadius.circular(30),
+                      ),
+                      child: Center(
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              type.isEmergency ? Icons.emergency : Icons.calendar_today,
+                              color: Colors.white,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              type.name,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 15,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _viewProductDetails(Map<String, dynamic> product) {
+    // Show a dialog with the product details - simple implementation for now
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(product['title'] ?? 'Product Details'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Product image
+              if (product.containsKey('imageUrl') && product['imageUrl'] != null) 
+                SizedBox(
+                  height: 200,
+                  width: double.infinity,
+                  child: Image.network(
+                    product['imageUrl'],
+                    fit: BoxFit.contain,
+                    errorBuilder: (context, error, _) => const Center(
+                      child: Icon(Icons.image_not_supported, size: 50, color: Colors.grey),
+                    ),
+                  ),
+                )
+              else if (product.containsKey('imageBase64') && product['imageBase64'] != null)
+                SizedBox(
+                  height: 200,
+                  width: double.infinity,
+                  child: _getProductImage(product),
+                ),
+              const SizedBox(height: 16),
+              
+              // Product price
+              Text(
+                'Rs ${product['price'] ?? '0'}',
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: AppConstants.primaryColor,
+                ),
+              ),
+              const SizedBox(height: 16),
+              
+              // Product description
+              if (product.containsKey('description') && product['description'] != null) ...[
+                const Text(
+                  'Description:',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  product['description'],
+                  style: const TextStyle(fontSize: 14),
+                ),
+                const SizedBox(height: 16),
+              ],
+              
+              // Product category
+              if (product.containsKey('category') && product['category'] != null) ...[
+                Row(
+                  children: [
+                    const Text(
+                      'Category: ',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    Text(
+                      product['category'],
+                      style: const TextStyle(fontSize: 14),
+                    ),
+                  ],
+                ),
+              ],
+              
+              // Product stock
+              if (product.containsKey('stock') && product['stock'] != null) ...[
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    const Text(
+                      'Stock: ',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    Text(
+                      '${product['stock']}',
+                      style: const TextStyle(fontSize: 14),
+                    ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Close'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              // Add to cart functionality would go here
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Added to cart')),
+              );
+              Navigator.of(context).pop();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppConstants.primaryColor,
+            ),
+            child: const Text('Add to Cart'),
           ),
         ],
       ),

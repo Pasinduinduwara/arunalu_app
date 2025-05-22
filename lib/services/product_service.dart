@@ -139,23 +139,55 @@ class ProductService {
     try {
       developer.log('ProductService: Fetching active products for home screen');
       
-      // Query only active products
-      final querySnapshot = await _firestore.collection(_collection)
-          .where('isActive', isEqualTo: true)
-          .orderBy('createdAt', descending: true)
-          .get();
+      // First attempt to query only active products
+      try {
+        final querySnapshot = await _firestore.collection(_collection)
+            .where('isActive', isEqualTo: true)
+            .get();
+        
+        final products = querySnapshot.docs.map((doc) {
+          final data = doc.data();
+          data['id'] = doc.id; // Include document ID
+          return data;
+        }).toList();
+        
+        developer.log('ProductService: Found ${products.length} active products with isActive filter');
+        
+        if (products.isNotEmpty) {
+          return products;
+        }
+      } catch (e) {
+        developer.log('ProductService: Error with isActive filter', error: e);
+        // Continue to fallback approach
+      }
       
-      final products = querySnapshot.docs.map((doc) {
+      // Fallback: Get all products and manually filter if the isActive query fails
+      developer.log('ProductService: Using fallback to get all products');
+      final querySnapshot = await _firestore.collection(_collection).get();
+      
+      final allProducts = querySnapshot.docs.map((doc) {
         final data = doc.data();
-        data['id'] = doc.id; // Include document ID
+        data['id'] = doc.id;
         return data;
       }).toList();
       
-      developer.log('ProductService: Successfully fetched ${products.length} active products');
-      return products;
+      developer.log('ProductService: Got ${allProducts.length} total products');
+      
+      // First try to filter for active products
+      var activeProducts = allProducts.where((p) => p['isActive'] == true).toList();
+      
+      // If no active products found, just return all products
+      if (activeProducts.isEmpty) {
+        developer.log('ProductService: No active products found, returning all ${allProducts.length} products');
+        return allProducts;
+      }
+      
+      developer.log('ProductService: Returning ${activeProducts.length} active products after manual filtering');
+      return activeProducts;
     } catch (e) {
-      developer.log('ProductService: Error fetching active products', error: e);
-      // Return empty list instead of throwing to avoid app crashes
+      developer.log('ProductService: Critical error fetching active products', error: e);
+      
+      // As a last resort, return empty list to avoid app crashes
       return [];
     }
   }
@@ -232,7 +264,8 @@ class ProductService {
   Widget safeBase64ToImage(String? base64String, {
     double? width, 
     double? height, 
-    BoxFit fit = BoxFit.cover
+    BoxFit fit = BoxFit.cover,
+    Widget Function(BuildContext, Object, StackTrace?)? errorBuilder
   }) {
     if (base64String == null || base64String.isEmpty) {
       developer.log('ProductService: Empty base64 string provided');
@@ -246,14 +279,17 @@ class ProductService {
         width: width,
         height: height,
         fit: fit,
-        errorBuilder: (context, error, stackTrace) {
+        errorBuilder: errorBuilder ?? (context, error, stackTrace) {
           developer.log('ProductService: Error rendering image', error: error);
-          return const Icon(Icons.broken_image, color: Colors.red);
+          return const Icon(Icons.image_not_supported, size: 50);
         },
       );
     } catch (e) {
-      developer.log('ProductService: Error decoding base64', error: e);
-      return const Icon(Icons.error_outline, color: Colors.red);
+      developer.log('ProductService: Error decoding base64 string', error: e);
+      
+      // We can't call errorBuilder directly since we don't have a BuildContext
+      // Just return a default error widget
+      return const Icon(Icons.image_not_supported, size: 50);
     }
   }
 
