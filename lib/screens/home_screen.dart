@@ -11,6 +11,11 @@ import '../models/category_model.dart';
 import '../models/service_model.dart';
 import '../models/appointment_model.dart';
 import 'dart:developer' as developer;
+import 'emergency_booking_screen.dart';
+import 'book_appointment_screen.dart';
+import 'my_appointments_screen.dart';
+import 'store_screen.dart';
+import 'my_account_page.dart';
 
 // Import the offline demo mode constant
 import '../main.dart';
@@ -609,6 +614,42 @@ class _HomeScreenState extends State<HomeScreen> {
             setState(() {
               _selectedIndex = index;
             });
+            
+            // Handle navigation based on index
+            if (index == 1) { // Appointments tab
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const MyAppointmentsScreen(),
+                ),
+              ).then((_) {
+                setState(() {
+                  _selectedIndex = 0;
+                });
+              });
+            } else if (index == 2) { // Store tab
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const StoreScreen(),
+                ),
+              ).then((_) {
+                setState(() {
+                  _selectedIndex = 0;
+                });
+              });
+            } else if (index == 4) { // Profile/Account tab
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const MyAccountPage(),
+                ),
+              ).then((_) {
+                setState(() {
+                  _selectedIndex = 0;
+                });
+              });
+            }
           },
           items: const [
             BottomNavigationBarItem(
@@ -1848,18 +1889,28 @@ class _HomeScreenState extends State<HomeScreen> {
                 return Row(
                   children: [
                     Expanded(
-                      child: Container(
-                        height: 50,
-                        decoration: BoxDecoration(
-                          color: Colors.grey[200],
-                          borderRadius: BorderRadius.circular(25),
-                        ),
-                        child: const Center(
-                          child: Text(
-                            'Normal',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
+                      child: InkWell(
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const BookAppointmentScreen(),
+                            ),
+                          );
+                        },
+                        child: Container(
+                          height: 50,
+                          decoration: BoxDecoration(
+                            color: Colors.grey[200],
+                            borderRadius: BorderRadius.circular(25),
+                          ),
+                          child: const Center(
+                            child: Text(
+                              'Normal',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           ),
                         ),
@@ -1867,20 +1918,28 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     const SizedBox(width: 16),
                     Expanded(
-                      child: Container(
-                        height: 50,
-                        decoration: BoxDecoration(
-                          color: Colors.red[400],
-                          borderRadius: BorderRadius.circular(25),
-                        ),
-                        child: const Center(
-                          child: Text(
-                            'Emergency',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
+                      child: ElevatedButton(
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const EmergencyBookingScreen(),
                             ),
+                          );
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red[400],
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(25),
+                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                        child: const Text(
+                          'Emergency',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
                           ),
                         ),
                       ),
@@ -1897,14 +1956,31 @@ class _HomeScreenState extends State<HomeScreen> {
                   itemCount: appointmentTypes.length,
                   itemBuilder: (context, index) {
                     final type = appointmentTypes[index];
-                    return Container(
-                      width: 150,
-                      margin: const EdgeInsets.only(right: 12),
-                      decoration: BoxDecoration(
-                        color: type.color,
-                        borderRadius: BorderRadius.circular(30),
+                    return ElevatedButton(
+                      onPressed: () {
+                        // Navigate to appropriate booking screen based on type
+                        if (type.isEmergency) {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const EmergencyBookingScreen(),
+                            ),
+                          );
+                        } else {
+                          // Handle normal appointment
+                          // You can add navigation to normal booking screen here
+                        }
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: type.color,
+                        padding: EdgeInsets.zero,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(30),
+                        ),
+                        minimumSize: const Size(150, 60),
                       ),
-                      child: Center(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [

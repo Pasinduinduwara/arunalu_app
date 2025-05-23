@@ -12,21 +12,16 @@ class ProductService {
   // Get all products
   Future<List<Map<String, dynamic>>> getAllProducts() async {
     try {
-      developer.log('ProductService: Fetching all products');
-      final querySnapshot = await _firestore.collection(_collection).get();
-      
-      final products = querySnapshot.docs.map((doc) {
-        final data = doc.data();
-        data['id'] = doc.id; // Include document ID
-        return data;
+      final QuerySnapshot snapshot = await _firestore.collection(_collection).get();
+      return snapshot.docs.map((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        return {
+          'id': doc.id,
+          ...data,
+        };
       }).toList();
-      
-      developer.log('ProductService: Successfully fetched ${products.length} products');
-      return products;
-    } catch (e, stackTrace) {
-      developer.log('ProductService: Error fetching products', error: e);
-      developer.log('ProductService: Stack trace: $stackTrace');
-      // Return empty list instead of throwing to avoid app crashes
+    } catch (e) {
+      developer.log('Error getting all products', error: e);
       return [];
     }
   }
@@ -54,83 +49,38 @@ class ProductService {
   }
 
   // Add a new product
-  Future<String> addProduct(Map<String, dynamic> productData) async {
+  Future<void> addProduct(Map<String, dynamic> productData) async {
     try {
-      developer.log('Adding new product');
-      
-      // Validate base64 image if present
-      if (productData.containsKey('imageBase64')) {
-        final imageBase64 = productData['imageBase64'] as String?;
-        if (imageBase64 != null && imageBase64.isNotEmpty) {
-          try {
-            // Attempt to decode to validate the base64 string
-            base64Decode(imageBase64);
-          } catch (e) {
-            developer.log('Invalid base64 image data', error: e);
-            throw Exception('Failed to process image: Invalid base64 data');
-          }
-        }
-      }
-      
-      // Add timestamp
-      productData['createdAt'] = FieldValue.serverTimestamp();
-      productData['updatedAt'] = FieldValue.serverTimestamp();
-      
-      // Add the product to Firestore
-      final docRef = await _firestore.collection(_collection).add(productData);
-      
-      developer.log('Product added with ID: ${docRef.id}');
-      return docRef.id;
+      await _firestore.collection(_collection).add({
+        ...productData,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
     } catch (e) {
       developer.log('Error adding product', error: e);
-      throw Exception('Failed to add product: $e');
+      throw Exception('Failed to add product');
     }
   }
 
   // Update a product
   Future<void> updateProduct(String productId, Map<String, dynamic> productData) async {
     try {
-      developer.log('Updating product with ID: $productId');
-      
-      // Validate base64 image if present
-      if (productData.containsKey('imageBase64')) {
-        final imageBase64 = productData['imageBase64'] as String?;
-        if (imageBase64 != null && imageBase64.isNotEmpty) {
-          try {
-            // Attempt to decode to validate the base64 string
-            base64Decode(imageBase64);
-          } catch (e) {
-            developer.log('Invalid base64 image data', error: e);
-            throw Exception('Failed to process image: Invalid base64 data');
-          }
-        }
-      }
-      
-      // Update timestamp
-      productData['updatedAt'] = FieldValue.serverTimestamp();
-      
-      // Update the product in Firestore
-      await _firestore.collection(_collection).doc(productId).update(productData);
-      
-      developer.log('Product updated successfully');
+      await _firestore.collection(_collection).doc(productId).update({
+        ...productData,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
     } catch (e) {
       developer.log('Error updating product', error: e);
-      throw Exception('Failed to update product: $e');
+      throw Exception('Failed to update product');
     }
   }
 
   // Delete a product
   Future<void> deleteProduct(String productId) async {
     try {
-      developer.log('Deleting product with ID: $productId');
-      
-      // Delete the product from Firestore
       await _firestore.collection(_collection).doc(productId).delete();
-      
-      developer.log('Product deleted successfully');
     } catch (e) {
       developer.log('Error deleting product', error: e);
-      throw Exception('Failed to delete product: $e');
+      throw Exception('Failed to delete product');
     }
   }
 
@@ -195,27 +145,19 @@ class ProductService {
   // Get products by category
   Future<List<Map<String, dynamic>>> getProductsByCategory(String category) async {
     try {
-      developer.log('ProductService: Fetching products for category: $category');
-      
-      Query query = _firestore.collection(_collection)
-          .where('isActive', isEqualTo: true);
-      
-      if (category != 'All' && category.isNotEmpty) {
-        query = query.where('category', isEqualTo: category);
-      }
-      
-      final querySnapshot = await query.get();
-      
-      final products = querySnapshot.docs.map((doc) {
+      final QuerySnapshot snapshot = await _firestore
+          .collection(_collection)
+          .where('category', isEqualTo: category)
+          .get();
+      return snapshot.docs.map((doc) {
         final data = doc.data() as Map<String, dynamic>;
-        data['id'] = doc.id; // Include document ID
-        return data;
+        return {
+          'id': doc.id,
+          ...data,
+        };
       }).toList();
-      
-      developer.log('ProductService: Successfully fetched ${products.length} products for category: $category');
-      return products;
     } catch (e) {
-      developer.log('ProductService: Error fetching products by category', error: e);
+      developer.log('Error getting products by category', error: e);
       return [];
     }
   }
@@ -261,35 +203,26 @@ class ProductService {
   }
 
   // Safe convert base64 to image widget
-  Widget safeBase64ToImage(String? base64String, {
-    double? width, 
-    double? height, 
-    BoxFit fit = BoxFit.cover,
-    Widget Function(BuildContext, Object, StackTrace?)? errorBuilder
+  Widget safeBase64ToImage(String base64String, {
+    BoxFit? fit,
+    Widget Function(BuildContext, Object, StackTrace?)? errorBuilder,
   }) {
-    if (base64String == null || base64String.isEmpty) {
-      developer.log('ProductService: Empty base64 string provided');
-      return const Icon(Icons.image_not_supported, size: 50);
-    }
-    
     try {
-      final bytes = base64Decode(base64String);
       return Image.memory(
-        bytes,
-        width: width,
-        height: height,
+        base64Decode(base64String),
         fit: fit,
-        errorBuilder: errorBuilder ?? (context, error, stackTrace) {
-          developer.log('ProductService: Error rendering image', error: error);
-          return const Icon(Icons.image_not_supported, size: 50);
-        },
+        errorBuilder: errorBuilder,
       );
     } catch (e) {
-      developer.log('ProductService: Error decoding base64 string', error: e);
-      
-      // We can't call errorBuilder directly since we don't have a BuildContext
-      // Just return a default error widget
-      return const Icon(Icons.image_not_supported, size: 50);
+      developer.log('Error converting base64 to image', error: e);
+      return errorBuilder?.call(
+        null as BuildContext,
+        e,
+        null,
+      ) ?? Container(
+        color: Colors.grey[200],
+        child: const Icon(Icons.image_not_supported, size: 50),
+      );
     }
   }
 
@@ -320,6 +253,26 @@ class ProductService {
     } catch (e) {
       developer.log('Error searching products', error: e);
       throw Exception('Failed to search products: $e');
+    }
+  }
+
+  // Get all categories
+  Future<List<String>> getCategories() async {
+    try {
+      final QuerySnapshot snapshot = await _firestore.collection(_collection).get();
+      final Set<String> categories = {};
+      
+      for (var doc in snapshot.docs) {
+        final data = doc.data() as Map<String, dynamic>;
+        if (data.containsKey('category') && data['category'] != null) {
+          categories.add(data['category'] as String);
+        }
+      }
+      
+      return categories.toList()..sort();
+    } catch (e) {
+      developer.log('Error getting categories', error: e);
+      return [];
     }
   }
 } 
